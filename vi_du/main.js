@@ -14,12 +14,21 @@
     tt.on('combatEnd', (e) => mod.log('xong trận', e));
     // Ô nhỏ trong nút nổi "Mod" (góc dưới phải); người chơi ghim ra ngoài được
     const o = mod.ui.addDock({
-      id: 'linh_thach',
-      title: 'Linh thạch',
+      id: 'tui_do',
+      title: 'Túi đồ',
       mount(el, tt) {
+        // All items
+        const row = (...kids) => {
+          const d = document.createElement('div');
+          d.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0';
+          d.append(...kids);
+          return d;
+        };
         const draw = () => {
           el.replaceChildren();
-          el.append(tt.ui.kit.stepper({value: tt.state().run.nhanVat.linhThach, max:99999999, step: 10000, onChange: (nv) => tt.state().run.nhanVat.linhThach = nv }))};
+          el.append(row('Linh thạch: ', tt.ui.kit.stepper({ value: tt.state().run.nhanVat.linhThach, max: 99999999, step: 1000000, onChange: (nv) => tt.state().run.nhanVat.linhThach = nv })));
+          el.append(row('Vật: ', tt.ui.kit.button({text: 'Mở túi đồ', kind: 'nho', onClick: () => mod.ui.openPanel('kit_tui_do')})));
+        };
         draw();
         return tt.subscribe(draw); // hàm hủy theo dõi = hàm dọn
       },
@@ -43,6 +52,7 @@
 
           // Vùng chứa các stepper, dựng lại mỗi khi đổi bước (kit không cập nhật prop động)
           const stats = document.createElement('div');
+          stats.style.cssText = 'display:flex;flex-direction:column;gap:10px';
           const drawStats = (v) => {
             stats.replaceChildren();
             const mk = (label, key) => stats.append(row(label,
@@ -53,10 +63,17 @@
             mk('Thân pháp', 'than_phap');
             mk('Căn cốt', 'can_cot');
             mk('Đạo tâm', 'dao_tam');
+            stats.append(row('Điểm luân hồi', 
+              kit.stepper({ value: tt.state().meta.diemLuanHoi ?? 0, max: 99999, step: v, onChange: (nv) => tt.state().meta.diemLuanHoi = nv })
+            ));
+            stats.append(row('Ô túi', 
+              kit.stepper({ value: tt.state().run.nhanVat.oTuiThem ?? 0, max: 99999, step: v, onChange: (nv) => tt.state().run.nhanVat.oTuiThem = nv })
+            ));
+            stats.append(row('Tẩy', 
+              kit.stepper({ value: tt.state().run.nhanVat.kinhMach.cho.doiMau ?? 0, max: 99999, step: v, onChange: (nv) => tt.state().run.nhanVat.kinhMach.cho.doiMau = nv })
+            ));
           };
           drawStats(1);
-
-          el.textContent = `Tuổi ${tt.state().run?.nhanVat.tuoi ?? '-'}, linh thạch ${tt.state().run?.nhanVat.linhThach ?? '-'}`;
           el.append(kit.select({ options: step, value: 1, onChange: (v) => drawStats(parseInt(v)) }));
           el.append(stats);
         };
@@ -65,16 +82,8 @@
       },
     });
     mod.ui.addSlot('itemTooltip', { id: 'id_vat', mount: (el, tt, itemId) => (el.textContent = `Mod Mẫu: ${itemId}`) });
-    mod.ui.addSlot('placeInfo', {
-      id: 'ghi',
-      title: 'Ghi chú Mod Mẫu',
-      mount(el) {
-        el.append('Khối này do mod thêm vào khung nơi chốn. ');
-        // Khung "Bộ component" mở từ đây, không qua nút nổi (fab: false)
-        el.append(mod.ui.kit.button({ text: 'Bộ component', icon: 'puzzle', kind: 'nho', onClick: () => mod.ui.openPanel('kit') }));
-      },
-    });
     mod.ui.addPanel({ id: 'kit', title: 'Bộ component', fab: false, mount: drawKitDemo });
+    mod.ui.addPanel({ id: 'kit_tui_do', title: 'Item đang có', fab: false, mount : drawTuiDo});
     mod.ui.addSlot('mapLayer', {
       id: 'cham',
       mount(layer, tt) {
@@ -131,4 +140,50 @@ function drawKitDemo(el, tt) {
   kit.tip(hint, 'Tooltip gắn vào phần tử có sẵn.');
   el.append(row(kit.icon('puzzle'), kit.icon({ name: 'gear', size: 20 }), hint, kit.price(1250)));
   el.append(row(kit.itemIcon('item.vi_du_thanh_truc_kiem'), kit.itemTile({ id: 'item.vi_du_thanh_truc_kiem', count: 2, onClick: () => say('bấm ô vật') })));
+}
+
+function drawTuiDo(el, tt) {
+  const kit = tt.ui.kit;
+  const row = (...kids) => {
+    const d = document.createElement('div');
+    d.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0';
+    d.append(...kids);
+    return d;
+  };
+  const items = Object.entries(tt.state().run.nhanVat.tuiDo);
+  let selected = null; // id vật đang chọn, hiện stepper cạnh ô đó
+
+  const draw = () => {
+    el.replaceChildren();
+    // Thêm vật vào túi: bấm nút, cộng 1 vật mẫu (đổi id nếu muốn vật khác)
+    el.append(row(kit.button({
+      text: 'Thêm vật',
+      kind: 'nho',
+      onClick: () => {
+        const tui = tt.state().run.nhanVat.tuiDo;
+        tui['item.vi_du_thanh_truc_kiem'] = (tui['item.vi_du_thanh_truc_kiem'] ?? 0) + 1;
+        draw();
+      },
+    })));
+    if (!items.length) el.append('Túi trống.');
+    items.forEach(([id, so]) => {
+      const tile = kit.itemTile({ id, onClick: () => { selected = selected === id ? null : id; draw(); } });
+      const hang = row(tile);
+      if (selected === id) {
+        const tui = tt.state().run.nhanVat.tuiDo;
+        // Stepper hiện ngay cạnh vật đang chọn, đổi số lượng trực tiếp
+        hang.append(kit.stepper({
+          value: tui[id], max: 999999, step: 10,
+          onChange: (v) => {
+            tui[id] = v;
+            if (v <= 0) { delete tui[id]; selected = null; }
+            draw();
+          },
+        }));
+      }
+      el.append(hang);
+    });
+  };
+  draw();
+  return tt.subscribe(draw);
 }
