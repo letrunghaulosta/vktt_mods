@@ -81,7 +81,7 @@
         return tt.subscribe(draw);
       },
     });
-    mod.ui.addSlot('itemTooltip', { id: 'id_vat', mount: (el, tt, itemId) => (el.textContent = `Mod Mẫu: ${itemId}`) });
+    mod.ui.addSlot('itemTooltip', { id: 'id_vat', mount: (el, tt, itemId) => addItem(el, tt, itemId)});
     mod.ui.addPanel({ id: 'kit', title: 'Bộ component', fab: false, mount: drawKitDemo });
     mod.ui.addPanel({ id: 'kit_tui_do', title: 'Item đang có', fab: false, mount : drawTuiDo});
     mod.ui.addSlot('mapLayer', {
@@ -186,4 +186,21 @@ function drawTuiDo(el, tt) {
   };
   draw();
   return tt.subscribe(draw);
+}
+
+function addItem(el, tt, id) {
+  const kit = tt.ui.kit;
+  const tui = tt.state().run.nhanVat.tuiDo;
+  if (tui[id] == null) {
+    el.append(kit.button({ text: 'Thêm vật', kind: 'nho', onClick: () => tui[id] = 1 }));
+  }
+  else {
+    el.append(kit.stepper({
+      value: tui[id], max: 999999, step: 100,
+      onChange: (v) => {
+        tui[id] = v;
+        if (v <= 0) delete tui[id];
+      },
+    }));
+  }
 }
