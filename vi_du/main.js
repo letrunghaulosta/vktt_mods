@@ -81,87 +81,69 @@
         return tt.subscribe(draw);
       },
     });
-    mod.ui.addSlot('itemTooltip', { id: 'id_vat', mount: (el, tt, itemId) => addItem(el, tt, itemId)});
-    mod.ui.addPanel({ id: 'kit', title: 'Bộ component', fab: false, mount: drawKitDemo });
     mod.ui.addPanel({ id: 'kit_tui_do', title: 'Item đang có', fab: false, mount : drawTuiDo});
-    mod.ui.addSlot('mapLayer', {
-      id: 'cham',
-      mount(layer, tt) {
-        // Chấm đỏ ở góc trên trái bản đồ (tọa độ thế giới)
-        const g = new tt.pixi.Graphics();
-        g.circle(60, 60, 24).fill(0xff3030);
-        layer.addChild(g);
-        tt.map.requestRender();
-        return () => g.destroy();
-      },
-    });
   },
 });
 
-/** Bày mọi component của `ui.kit`: giao diện đúng kiểu game, không cần React. Kit tạo trong mount tự gỡ khi khung đóng. */
-function drawKitDemo(el, tt) {
-  const kit = tt.ui.kit;
-  const say = (text) => tt.ui.toast(text);
-  const row = (...kids) => {
-    const d = document.createElement('div');
-    d.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0';
-    d.append(...kids);
-    return d;
-  };
-
-  el.append(kit.section({ title: 'Form' }));
-  el.append(row(kit.button({ text: 'Nút chính', kind: 'chinh', onClick: () => say('bấm nút chính') }), kit.button({ text: 'Nút phụ', tip: 'Hộp chữ khi rê chuột' }), kit.button({ text: 'Nhỏ', icon: 'gear', kind: 'nho' })));
-  el.append(row(kit.select({ options: [{ value: 'kim', label: 'Kim', hint: 'sắc bén' }, 'Mộc', 'Thủy'], value: 'kim', onChange: say })));
-  el.append(row(kit.combobox({ options: ['Thanh Khê', 'Lạc Nhật Cốc', 'Vân Mộng Trạch'], placeholder: 'Gõ để tìm…', onChange: say })));
-  el.append(row(kit.checkbox({ label: 'Tự kết lượt', hint: 'ví dụ', onChange: (v) => say(`tick: ${v}`) })));
-  el.append(kit.radio({ options: ['Đánh', 'Chạy', 'Hàng'], value: 'Đánh', inline: true, onChange: say }));
-  el.append(row(kit.input({ placeholder: 'Ghi chú', onEnter: (v) => say(`nhập: ${v}`) }), kit.input({ type: 'number', value: 3, min: 0, max: 9 })));
-  el.append(row(kit.stepper({ value: 1, min: 1, max: 10, onChange: (v) => say(`số: ${v}`) }), kit.slider({ value: 40, max: 100, showValue: true })));
-
-  el.append(kit.section({ title: 'Khung' }));
-  el.append(kit.row({ label: 'Linh thạch', value: tt.state().run?.nhanVat.linhThach ?? '-' }));
-  el.append(kit.collapse({ title: 'Mục gập', summary: '2 dòng', mount: (box) => box.append('Nội dung trong mục gập.') }));
-  el.append(kit.tabs({ tabs: [
-    { id: 'mot', title: 'Tab một', mount: (box) => box.append('Nội dung tab một.') },
-    { id: 'hai', title: 'Tab hai', mount: (box) => box.append(kit.richText({ text: 'Tab hai: hồi 30 khí huyết, nhận 5 linh thạch.', numbers: true })) },
-  ] }));
-  const pop = kit.button({ text: 'Lớp nổi', kind: 'nho', onClick: () => kit.popup(pop, { mount: (box) => box.append('Bấm ra ngoài để đóng.') }) });
-  el.append(row(
-    kit.button({ text: 'Hộp', kind: 'nho', onClick: async () => {
-      const n = await kit.modal({ title: 'Hộp của mod', mount: (box) => box.append('Nội dung tự vẽ.'), buttons: [{ text: 'Đồng ý', kind: 'chinh' }, { text: 'Thôi' }] }).closed;
-      say(`hộp đóng, nút ${n}`);
-    } }),
-    pop,
-  ));
-
-  el.append(kit.section({ title: 'Chữ, icon, vật' }));
-  const hint = document.createElement('span');
-  hint.textContent = 'Rê vào đây';
-  kit.tip(hint, 'Tooltip gắn vào phần tử có sẵn.');
-  el.append(row(kit.icon('puzzle'), kit.icon({ name: 'gear', size: 20 }), hint, kit.price(1250)));
-  el.append(row(kit.itemIcon('item.vi_du_thanh_truc_kiem'), kit.itemTile({ id: 'item.vi_du_thanh_truc_kiem', count: 2, onClick: () => say('bấm ô vật') })));
-}
-
 function drawTuiDo(el, tt) {
   const kit = tt.ui.kit;
+  // Giữ nội dung trong khung: cho phép cuộn dọc và xuống dòng
+  el.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px';
   const row = (...kids) => {
     const d = document.createElement('div');
-    d.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0';
+    d.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0;min-width:0';
     d.append(...kids);
     return d;
   };
+
   const items = Object.entries(tt.state().run.nhanVat.tuiDo);
   let selected = null; // id vật đang chọn, hiện stepper cạnh ô đó
 
   const draw = () => {
     el.replaceChildren();
     // Thêm vật vào túi: bấm nút, cộng 1 vật mẫu (đổi id nếu muốn vật khác)
+    // Chỉ giữ MỘT popup gợi ý: đóng cái cũ trước khi mở cái mới
+    const phamCap = ['Phàm phẩm', 'Hoàng phẩm', 'Huyền phẩm', 'Địa phẩm', 'Thiên phẩm', 'Tiên phẩm', 'Thần phẩm', 'Nghịch Thiên', 'Bất Diệt'];
+
+    let goiY = null; // { close() } của popup đang mở
+    let foundItem = '';
+    const addItem = kit.input({
+      onChange: (v) => {
+        goiY?.close(); // đóng popup cũ, tránh chồng lên nhau
+        if (!v) { goiY = null; return; }
+        const findItems = ({ten}) => {return ten.toLowerCase().includes(v.toLowerCase())? true : false};
+        goiY = kit.popup(addItem, {
+          mount: (box) => {
+            const found = Map.groupBy(tt.content.items.values(), findItems).get(true) ?? [];
+
+            if (!found.length) box.textContent = 'Không tìm thấy vật nào.';
+            else found.forEach((item) => {
+              // Bọc trong phần tử bấm được: onclick của mình + giữ tooltip/icon cũ của kit
+              const chon = row(kit.itemIcon({ id: item.id, size: 16 }), item.ten + "-" + phamCap[item.pham_cap-1]);
+              chon.style.cssText += 'cursor:pointer';
+              chon.onclick = () => {
+                const tui = tt.state().run.nhanVat.tuiDo;
+                tui[item.id] = (tui[item.id] ?? 0) + 1;
+                goiY?.close(); goiY = null;
+                draw();
+              };
+              box.append(chon);
+            });
+            
+          },
+        });
+      },
+    });
+    el.append(row(addItem));
+
     el.append(row(kit.button({
       text: 'Thêm vật',
       kind: 'nho',
       onClick: () => {
         const tui = tt.state().run.nhanVat.tuiDo;
-        tui['item.vi_du_thanh_truc_kiem'] = (tui['item.vi_du_thanh_truc_kiem'] ?? 0) + 1;
+        if(foundItem !== '') tui[foundItem] = (tui[foundItem] ?? 0) + 1;
+        foundItem = '';
+        addItem.value = ''; // xóa ô tìm (nếu kit.input hỗ trợ set value)
         draw();
       },
     })));
@@ -186,21 +168,4 @@ function drawTuiDo(el, tt) {
   };
   draw();
   return tt.subscribe(draw);
-}
-
-function addItem(el, tt, id) {
-  const kit = tt.ui.kit;
-  const tui = tt.state().run.nhanVat.tuiDo;
-  if (tui[id] == null) {
-    el.append(kit.button({ text: 'Thêm vật', kind: 'nho', onClick: () => tui[id] = 1 }));
-  }
-  else {
-    el.append(kit.stepper({
-      value: tui[id], max: 999999, step: 100,
-      onChange: (v) => {
-        tui[id] = v;
-        if (v <= 0) delete tui[id];
-      },
-    }));
-  }
 }
